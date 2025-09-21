@@ -103,40 +103,38 @@
       const img1 = await loadImage(file1);
       const img2 = await loadImage(file2);
 
-      // scale both images to max 512px height
       const maxHeight = 512;
       const scaled1 = scaleImage(img1, maxHeight);
       const scaled2 = scaleImage(img2, maxHeight);
 
       const canvas = document.createElement("canvas");
       canvas.width = scaled1.width + scaled2.width;
-      canvas.height = maxHeight + 40; // extra space for labels
+      canvas.height = maxHeight + 40;
       const ctx = canvas.getContext("2d");
 
-      // White background
+      // Background
       ctx.fillStyle = "white";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw Image 1
+      // Image 1
       ctx.drawImage(img1, 0, 0, scaled1.width, scaled1.height);
       ctx.fillStyle = "black";
       ctx.font = "20px Arial";
       ctx.fillText("Image 1", scaled1.width / 2 - 40, maxHeight + 25);
 
-      // Draw Image 2
+      // Image 2
       ctx.drawImage(img2, scaled1.width, 0, scaled2.width, scaled2.height);
-      ctx.fillStyle = "black";
       ctx.fillText("Image 2", scaled1.width + (scaled2.width / 2 - 40), maxHeight + 25);
 
-      // Compress close to 60KB
+      // Compress near 60KB
       let qualityLow = 0.1, qualityHigh = 0.95, mergedDataUrl;
-      for (let i = 0; i < 10; i++) { // binary search ~10 iterations
+      for (let i = 0; i < 10; i++) {
         let mid = (qualityLow + qualityHigh) / 2;
         mergedDataUrl = canvas.toDataURL("image/jpeg", mid);
         const sizeKB = Math.round((mergedDataUrl.length * 3) / 4 / 1024);
         if (sizeKB > 62) qualityHigh = mid;
         else if (sizeKB < 58) qualityLow = mid;
-        else break; // within target range
+        else break;
       }
 
       // Show preview
@@ -148,7 +146,7 @@
       const sizeKB = Math.round((mergedDataUrl.length * 3) / 4 / 1024);
       previewDiv.innerHTML += `<p>📦 Merged Image Size: ${sizeKB} KB</p>`;
 
-      // Store for AI use
+      // Save
       window.mergedImage = mergedDataUrl;
     }
 
@@ -163,16 +161,16 @@
 
       resultDiv.innerHTML = "<p>⏳ Generating with AI...</p>";
 
-      const base64Img = window.mergedImage.split(",")[1];
+      const base64Img = window.mergedImage.split(",")[1]; // remove data URL prefix
 
       puter.ai.txt2img(prompt, {
         model: "gemini-2.5-flash-image-preview",
-        input_image: { data: base64Img, mime_type: "image/jpeg" }
+        input_image: base64Img,
+        input_image_mime_type: "image/jpeg"   // ✅ FIXED
       }).then((image) => {
         resultDiv.innerHTML = "";
         resultDiv.appendChild(image);
 
-        // Download button
         const downloadBtn = document.createElement("a");
         downloadBtn.innerText = "⬇️ Download Image";
         downloadBtn.href = image.src;
@@ -186,7 +184,7 @@
         downloadBtn.style.borderRadius = "8px";
         resultDiv.appendChild(downloadBtn);
       }).catch(err => {
-        resultDiv.innerHTML = "<p style='color:red;'>❌ Error: " + err + "</p>";
+        resultDiv.innerHTML = "<p style='color:red;'>❌ Error: " + JSON.stringify(err) + "</p>";
       });
     }
   </script>
