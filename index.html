@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Image Merger & Generator</title>
+  <script src="https://js.puter.com/v2/"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f9;
+      text-align: center;
+      padding: 20px;
+    }
+    h1 {
+      color: #333;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      max-width: 550px;
+      margin: auto;
+    }
+    input, textarea, button {
+      margin: 10px 0;
+      padding: 10px;
+      width: 90%;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    #preview img {
+      max-width: 100%;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>✨ AI Image Merger & Generator</h1>
+  <div class="card">
+    <p>Upload <b>Model (Image 1)</b> and <b>Cloth (Image 2)</b>:</p>
+    
+    <input type="file" id="image1" accept="image/*">
+    <input type="file" id="image2" accept="image/*">
+    <button onclick="mergeImages()">Merge & Preview</button>
+
+    <div id="preview"></div>
+
+    <textarea id="prompt" placeholder="Enter your prompt after preview..."></textarea>
+    <button onclick="generate()">Generate Final Image</button>
+  </div>
+
+  <div id="result"></div>
+
+  <script>
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function loadImage(file) {
+      return new Promise(async (resolve, reject) => {
+        const img = new Image();
+        img.src = await fileToBase64(file);
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+      });
+    }
+
+    function scaleImage(img, maxHeight) {
+      const scale = maxHeight / img.height;
+      return {
+        width: img.width * scale,
+        height: img.height * scale,
+        scale
+      };
+    }
+
+    async function mergeImages() {
+      const file1 = document.getElementById("image1").files[0];
+      const file2 = document.getElementById("image2").files[0];
+      const previewDiv = document.getElementById("preview");
+
+      if (!file1 || !file2) {
+        alert("Please upload both images first!");
+        return;
+      }
+
+      const img1 = await loadImage(file1);
+      const img2 = await loadImage(file2);
+
+      // scale both images to max 512px height
+      const maxHeight = 512;
+      const scaled1 = scaleImage(img1, maxHeight);
+      const scaled2 = scaleImage(img2, maxHeight);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = scaled1.width + scaled2.width;
+      canvas.height = maxHeight + 40; // extra space for labels
+      const ctx = canvas.getContext("2d");
+
+      // White background
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Image 1
+      ctx.drawImage(img1, 0, 0, scaled1.width, scaled1.height);
+      ctx.fillStyle = "black";
+      ctx.font = "20px Arial";
+      ctx.fillText("Image 1", scaled1.width / 2 - 40, maxHeight + 25);
+
+      // Draw Image 2
+      ctx.drawImage(img2, scaled1.width, 0, scaled2.width, scaled2.height);
+      ctx.fillStyle = "black";
+      ctx.fillText("Image 2", scaled1.width + (scaled2.width / 2 - 40), maxHeight + 25);
+
+      // Compress close to 60KB
+      let qualityLow = 0.1, qualityHigh = 0.95, mergedDataUrl;
+      for (let i = 0; i < 10; i++) { // binary search ~10 iterations
+        let mid = (qualityLow + qualityHigh) / 2;
+        mergedDataUrl = canvas.toDataURL("image/jpeg", mid);
+        const sizeKB = Math.round((mergedDataUrl.length * 3) / 4 / 1024);
+        if (sizeKB > 62) qualityHigh = mid;
+        else if (sizeKB < 58) qualityLow = mid;
+        else break; // within target range
+      }
+
+      // Show preview
+      previewDiv.innerHTML = "";
+      const imgEl = document.createElement("img");
+      imgEl.src = mergedDataUrl;
+      previewDiv.appendChild(imgEl);
+
+      const sizeKB = Math.round((mergedDataUrl.length * 3) / 4 / 1024);
+      previewDiv.innerHTML += `<p>📦 Merged Image Size: ${sizeKB} KB</p>`;
+
+      // Store for AI use
+      window.mergedImage = mergedDataUrl;
+    }
+
+    async function generate() {
+      const prompt = document.getElementById("prompt").value;
+      const resultDiv = document.getElementById("result");
+
+      if (!window.mergedImage || !prompt) {
+        alert("Please merge images first and enter a prompt!");
+        return;
+      }
+
+      resultDiv.innerHTML = "<p>⏳ Generating with AI...</p>";
+
+      const base64Img = window.mergedImage.split(",")[1];
+
+      puter.ai.txt2img(prompt, {
+        model: "gemini-2.5-flash-image-preview",
+        input_image: { data: base64Img, mime_type: "image/jpeg" }
+      }).then((image) => {
+        resultDiv.innerHTML = "";
+        resultDiv.appendChild(image);
+
+        // Download button
+        const downloadBtn = document.createElement("a");
+        downloadBtn.innerText = "⬇️ Download Image";
+        downloadBtn.href = image.src;
+        downloadBtn.download = "generated.png";
+        downloadBtn.style.display = "block";
+        downloadBtn.style.marginTop = "10px";
+        downloadBtn.style.textDecoration = "none";
+        downloadBtn.style.color = "white";
+        downloadBtn.style.background = "#28a745";
+        downloadBtn.style.padding = "10px";
+        downloadBtn.style.borderRadius = "8px";
+        resultDiv.appendChild(downloadBtn);
+      }).catch(err => {
+        resultDiv.innerHTML = "<p style='color:red;'>❌ Error: " + err + "</p>";
+      });
+    }
+  </script>
+</body>
+</html>
